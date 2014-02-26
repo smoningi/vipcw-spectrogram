@@ -11,7 +11,7 @@
 #include <fcntl.h>
 #include "fft_socket_header.h"
 #include "linkedlist.h"
-
+//TESTTESTTESTTEST
 //#define AXIS_START 0
 char buff[20];
 double *buffer;
