@@ -39,11 +39,43 @@ void err(const char *msg)
 
 int main(int argc, char *argv[])
 {
+    int opt;
+    int r = DEFAULT_R;
+    int s = DEFAULT_S;
+    int f = DEFAULT_F;
+    double t = DEFAULT_T;
+    double w = DEFAULT_W;
+    char* sockfd;
+
+    /* Read arguments */ 
+    while(-1 != (opt = getopt(argc, argv, "r:s:f:t:w:n"))) {
+        switch(opt) {
+            case 'r':
+                r = atoi(optarg);
+                break;
+            case 's':
+                s = atoi(optarg);
+                break;
+            case 'f':
+                f = atoi(optarg);
+                break;
+            case 't':
+                t = atof(optarg);
+                break;
+            case 'w':
+                w = atof(optarg);
+                break;
+            case 'n':
+                sockfd = atoi(optarg);
+                break;
+        }
+    }
 
     if(debug) printf("IN: fft_sender:main()\n");
-    // int n = Write(get_samples(256), argv[1]);
-    if(!write_audio(argv[1], 256));
-        if(debug)fprintf(stderr, "ERROR, write failed\n");
+
+    if(!write_audio(sockfd, r, s, f, t, w));
+        fprintf(stderr, "ERROR, write failed\n");
+
     return 0;
 }
 
@@ -57,6 +89,7 @@ void init_fft(int bytesToNextHeader, int samplesToNextFFT, int ptsPerFFT,
              int sampFreq, int fftRate, int endTrans)
 {
     if(debug) printf("IN: fft_sender:init_fft()\n");
+    
     hdr = (fft_header*) malloc(sizeof(fft_header));
     hdr->constSync = 0xACFDFFBC;
 	hdr->ptsPerFFT = ptsPerFFT/2 + 1;
@@ -84,7 +117,7 @@ void init_fft(int bytesToNextHeader, int samplesToNextFFT, int ptsPerFFT,
  *      Use char's to only read left channel data.
  *
  */
-void get_samples(int N, double* dbuffer)
+void get_samples(int N, double* dbuffer, int r, int f)
 {
 
     if(debug) printf("IN: fft_sender:get_samples(%d)\n", N);
@@ -95,7 +128,6 @@ void get_samples(int N, double* dbuffer)
         sleep(1);
 
         char wav_header[48];
-        // wave* wav_header = (wave*) malloc(sizeof(wave));
 
         // int n = fgets(wav_header, WAV_HEADER_SIZE, stdin);
         int n = read(fileno(stdin), wav_header, WAV_HEADER_SIZE);
@@ -105,15 +137,15 @@ void get_samples(int N, double* dbuffer)
             //if(debug) printf("Read %d bytes into wav_header\n", n);
             err("Error discarding Wave header");
         }
-	int ptsPerFFT = N;         // number of points per FFT 
+        int ptsPerFFT = N;         // number of points per FFT 
         int bytesToNextHeader = ptsPerFFT * sizeof(double) + sizeof(fft_header);  // total amount of space (header+data)
         // int sampleRate = wav_header->sampleRate;
-        int sampleRate = 22050;
-        int fftRate = 10;       // 10 FFT's per second.
+        int sampleRate = r;
+        int fftRate = f;       // 10 FFT's per second.
         int samplesToNextFFT = (sampleRate / fftRate) - ptsPerFFT;   // Num samples to the start of the next FFT
         int endTrans = 5;
 
-        init_fft(bytesToNextHeader, samplesToNextFFT, ptsPerFFT, sampleRate, fftRate, endTrans);
+        init_fft(bytesToNextHeader, samplesToNextFFT, ptsPerFFT, r, f, endTrans);
       	if(debug) printf("\t Back in get_samples() from init_fft()\n");
         // sleep(1);
         init_samples = 1;
@@ -146,53 +178,12 @@ void get_samples(int N, double* dbuffer)
     }
 }
 
-int write_audio(char* sockfd, int N)
+int write_audio(char* sockfd, int r, int s, int f, double t, double w)
 {
+    int N = s;
     if(debug) printf("IN: fft_sender:write_audio(%s, %d)\n", sockfd, N);
-
     double dbuffer[N];
     double out[N/2+1];
-
-    /*int sockfd, portno, n, newsockfd;
-    struct sockaddr_in serv_addr, cli_addr;
-    // struct hostent *server;  
-    socklen_t clilen;*/
-
-    // if (argc < 2)
-    // {
-    //  if(debug)fprintf(stderr,"ERROR, no host provided\n");
-    //  exit(1);
-    // }
-    
-    // SERVER CODE
-    /*portno = 51717;
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) 
-        error1("ERROR opening socket");
-    //server = gethostbyname(argv[1]);
-    bzero((char *) &serv_addr, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(portno);
-    if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-               error1("ERROR on binding");
-    listen(sockfd,5);
-    clilen = sizeof(cli_addr);
-        
-    newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-    if (newsockfd < 0)
-            error1("ERROR on accept");*/
-
-    /*bzero((char *) &serv_addr, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    bcopy((char *)server->h_addr, 
-         (char *)&serv_addr.sin_addr.s_addr,
-         server->h_length);
-    serv_addr.sin_port = htons(portno);
-    if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
-        if(debug)fprintf(stderr, "Error on connect(): %s\n", strerror(errno));
-        exit(-1);
-    }*/
 
     int n, newsockfd = atoi(sockfd);
 
@@ -201,7 +192,7 @@ int write_audio(char* sockfd, int N)
 
         //if(debug) printf("IN: fft_sender:write_audio(): getting %d samples..\n", N);
         
-        get_samples(N, dbuffer);
+        get_samples(N, dbuffer, r, f);
 
         if(debug)fprintf(stderr, "Sending header... ");
         n = write(newsockfd, (char *) hdr, sizeof(fft_header));
@@ -209,7 +200,7 @@ int write_audio(char* sockfd, int N)
         if (n < 0) 
              err("ERROR writing to socket");
         
-        genfft(N, dbuffer, out);
+        genfft(N, dbuffer, out, t, w);
 
         // int j;
         //if(debug) printf("Output buffer to send:\n");
